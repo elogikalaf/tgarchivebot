@@ -104,6 +104,35 @@ async def latest_chat_message(chat_id: str | int) -> Message | None:
     return None
 
 
+def archive_note_text(message: Message) -> str | None:
+    if not message.text:
+        return None
+
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        return None
+
+    note = parts[1].strip()
+    return note or None
+
+
+async def send_archive_note(
+    target_chat: str | int,
+    reply_to_message_id: int,
+    text: str,
+) -> Message:
+    while True:
+        try:
+            return await app.send_message(
+                chat_id=target_chat,
+                text=text,
+                reply_to_message_id=reply_to_message_id,
+            )
+        except FloodWait as flood_wait:
+            logger.warning("Flood wait for %s seconds", flood_wait.value)
+            await asyncio.sleep(flood_wait.value)
+
+
 async def recover_copied_media_group(target_chat: str | int) -> list[Message]:
     latest_message = await latest_chat_message(target_chat)
     if latest_message is None:
@@ -163,6 +192,21 @@ async def archive_media_group(command: Message, replied: Message) -> list[Messag
         return [await archive_single_message(command, replied)]
 
 
+async def archive_note_if_present(
+    command: Message,
+    copied_messages: list[Message],
+) -> Message | None:
+    note = archive_note_text(command)
+    if note is None or not copied_messages:
+        return None
+
+    return await send_archive_note(
+        settings.archive_chat,
+        copied_messages[-1].id,
+        note,
+    )
+
+
 @app.on_message(filters.group & filters.command(settings.archive_command))
 async def archive_command(_: Client, message: Message) -> None:
     replied = message.reply_to_message
@@ -178,6 +222,8 @@ async def archive_command(_: Client, message: Message) -> None:
             copied_messages = await archive_media_group(message, replied)
         else:
             copied_messages = [await archive_single_message(message, replied)]
+
+        note_message = await archive_note_if_present(message, copied_messages)
     except PeerIdInvalid:
         logger.exception("Archive target is invalid or unknown")
         await safe_reply(message, archive_chat_help_text())
@@ -199,6 +245,8 @@ async def archive_command(_: Client, message: Message) -> None:
             if message_link is None
             else f"Archived 1 message in channel {channel_name}: {message_link}"
         )
+        if note_message is not None:
+            reply_text += " Added search note after the archived message."
         await safe_reply(
             message,
             reply_text,
@@ -211,7 +259,12 @@ async def archive_command(_: Client, message: Message) -> None:
     )
     await safe_reply(
         message,
-        f"Archived {len(copied_messages)} messages in channel {channel_name}.",
+        (
+            f"Archived {len(copied_messages)} messages in channel {channel_name}. "
+            "Added search note after the archived media group."
+            if note_message is not None
+            else f"Archived {len(copied_messages)} messages in channel {channel_name}."
+        ),
     )
 
 

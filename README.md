@@ -1,6 +1,6 @@
 # Archive Bot
 
-A small Telegram bot built with Pyrofork. Add it to a group, reply to a message with `/archive`, and it copies the replied message to an archive channel. If the replied message is part of a media album, the bot tries to copy the whole album.
+A small Telegram bot built with Pyrofork. Add it to a group, reply to a message with `/archive`, and it copies the replied message to an archive channel. If the replied message is part of a media album, the bot tries to copy the whole album. You can also use `/archive <message>` to append a searchable follow-up note after the archived post in the destination channel.
 
 ## Setup
 
