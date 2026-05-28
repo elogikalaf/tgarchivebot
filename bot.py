@@ -173,7 +173,7 @@ def archive_note_with_date(command: Message, source: Message) -> str:
     note = archive_note_text(command)
     lines = []
     if note is not None:
-        lines.append(f"TEXT: {note}")
+        lines.append(f"{note}")
     lines.extend(message_date_lines(source))
     return "\n".join(lines)
 
