@@ -48,6 +48,12 @@ class Settings:
     archive_command: str = "archive"
 
 
+@dataclass(frozen=True)
+class ArchiveOptions:
+    include_media_group: bool = False
+    note: str | None = None
+
+
 def _required(name: str) -> str:
     value = os.getenv(name)
     if not value:
@@ -119,16 +125,27 @@ async def copy_media_group_with_flood_wait(
             await asyncio.sleep(flood_wait.value)
 
 
-def archive_note_text(message: Message) -> str | None:
+def archive_options(message: Message) -> ArchiveOptions:
     if not message.text:
-        return None
+        return ArchiveOptions()
 
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
-        return None
+        return ArchiveOptions()
 
-    note = parts[1].strip()
-    return note or None
+    text = parts[1].strip()
+    if text == "--all":
+        return ArchiveOptions(include_media_group=True)
+
+    if text.startswith("--all "):
+        note = text.removeprefix("--all ").strip()
+        return ArchiveOptions(include_media_group=True, note=note or None)
+
+    return ArchiveOptions(note=text or None)
+
+
+def archive_note_text(message: Message) -> str | None:
+    return archive_options(message).note
 
 
 def message_date_text(message: Message) -> str:
@@ -232,7 +249,8 @@ async def archive_command(_: Client, message: Message) -> None:
         return
 
     try:
-        if replied.media_group_id:
+        options = archive_options(message)
+        if replied.media_group_id and options.include_media_group:
             copied_messages = await archive_media_group(message, replied)
         else:
             copied_messages = [await archive_single_message(message, replied)]
