@@ -1,10 +1,11 @@
 import asyncio
+import inspect
 import logging
 import os
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
-from pyrogram import Client, filters
+from pyrogram import Client, filters, raw
 from pyrogram.errors import FloodWait, PeerIdInvalid, RPCError
 from pyrogram.types import Message
 
@@ -16,6 +17,25 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logger = logging.getLogger("archivebot")
+
+
+def patch_raw_messages_topics_default() -> None:
+    messages_type = raw.types.messages.Messages
+    signature = inspect.signature(messages_type)
+    topics = signature.parameters.get("topics")
+    if topics is None or topics.default is not inspect.Parameter.empty:
+        return
+
+    original_init = messages_type.__init__
+
+    def patched_init(self, *args, **kwargs):
+        kwargs.setdefault("topics", [])
+        original_init(self, *args, **kwargs)
+
+    messages_type.__init__ = patched_init
+
+
+patch_raw_messages_topics_default()
 
 
 @dataclass(frozen=True)
@@ -98,12 +118,6 @@ async def copy_media_group_with_flood_wait(
             await asyncio.sleep(flood_wait.value)
 
 
-async def latest_chat_message(chat_id: str | int) -> Message | None:
-    async for item in app.get_chat_history(chat_id, limit=1):
-        return item
-    return None
-
-
 def archive_note_text(message: Message) -> str | None:
     if not message.text:
         return None
@@ -131,17 +145,6 @@ async def send_archive_note(
         except FloodWait as flood_wait:
             logger.warning("Flood wait for %s seconds", flood_wait.value)
             await asyncio.sleep(flood_wait.value)
-
-
-async def recover_copied_media_group(target_chat: str | int) -> list[Message]:
-    latest_message = await latest_chat_message(target_chat)
-    if latest_message is None:
-        raise RuntimeError("Could not find the newly archived media group")
-
-    if latest_message.media_group_id:
-        return await app.get_media_group(target_chat, latest_message.id)
-
-    return [latest_message]
 
 
 def archive_chat_help_text() -> str:
@@ -184,9 +187,6 @@ async def archive_media_group(command: Message, replied: Message) -> list[Messag
             replied.chat.id,
             replied.id,
         )
-    except TypeError:
-        logger.exception("copy_media_group returned an invalid response; recovering")
-        return await recover_copied_media_group(settings.archive_chat)
     except RPCError:
         logger.exception("Could not fetch media group; falling back to one message")
         return [await archive_single_message(command, replied)]
