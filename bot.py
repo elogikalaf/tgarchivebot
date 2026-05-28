@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from dotenv import load_dotenv
 from pyrogram import Client, filters
-from pyrogram.errors import FloodWait, RPCError
+from pyrogram.errors import FloodWait, PeerIdInvalid, RPCError
 from pyrogram.types import Message
 
 
@@ -68,45 +68,50 @@ async def copy_message_with_flood_wait(
     target_chat: str | int,
     source_chat: int | str,
     message_id: int,
-) -> None:
+) -> Message:
     while True:
         try:
-            await app.copy_message(
+            return await app.copy_message(
                 chat_id=target_chat,
                 from_chat_id=source_chat,
                 message_id=message_id,
             )
-            return
         except FloodWait as flood_wait:
             logger.warning("Flood wait for %s seconds", flood_wait.value)
             await asyncio.sleep(flood_wait.value)
 
 
-async def archive_single_message(command: Message, replied: Message) -> int:
-    await copy_message_with_flood_wait(
+def archive_chat_help_text() -> str:
+    return (
+        "Archive target is not reachable. Check ARCHIVE_CHAT and make sure the bot "
+        "has already been added to that channel as an admin. For private channels, "
+        "use the channel ID in the form -1001234567890."
+    )
+
+
+async def archive_single_message(command: Message, replied: Message) -> Message:
+    return await copy_message_with_flood_wait(
         settings.archive_chat,
         replied.chat.id,
         replied.id,
     )
-    return 1
 
 
-async def archive_media_group(command: Message, replied: Message) -> int:
+async def archive_media_group(command: Message, replied: Message) -> list[Message]:
     try:
         album = await app.get_media_group(replied.chat.id, replied.id)
     except RPCError:
         logger.exception("Could not fetch media group; falling back to one message")
-        return await archive_single_message(command, replied)
+        return [await archive_single_message(command, replied)]
 
-    copied = 0
+    copied_messages: list[Message] = []
     for item in sorted(album, key=lambda message: message.id):
-        await copy_message_with_flood_wait(
+        copied_messages.append(await copy_message_with_flood_wait(
             settings.archive_chat,
             item.chat.id,
             item.id,
-        )
-        copied += 1
-    return copied
+        ))
+    return copied_messages
 
 
 @app.on_message(filters.group & filters.command(settings.archive_command))
@@ -121,15 +126,31 @@ async def archive_command(_: Client, message: Message) -> None:
 
     try:
         if replied.media_group_id:
-            count = await archive_media_group(message, replied)
+            copied_messages = await archive_media_group(message, replied)
         else:
-            count = await archive_single_message(message, replied)
+            copied_messages = [await archive_single_message(message, replied)]
+    except PeerIdInvalid:
+        logger.exception("Archive target is invalid or unknown")
+        await safe_reply(message, archive_chat_help_text())
+        return
     except RPCError as error:
         logger.exception("Archive failed")
         await safe_reply(message, f"Archive failed: {error.MESSAGE}")
         return
 
-    await safe_reply(message, f"Archived {count} message{'s' if count != 1 else ''}.")
+    if len(copied_messages) == 1:
+        archived_message = copied_messages[0]
+        await safe_reply(
+            message,
+            f"Archived 1 message in channel {settings.archive_chat} "
+            f"with message id {archived_message.id}.",
+        )
+        return
+
+    await safe_reply(
+        message,
+        f"Archived {len(copied_messages)} messages in channel {settings.archive_chat}.",
+    )
 
 
 if __name__ == "__main__":
@@ -139,4 +160,3 @@ if __name__ == "__main__":
         settings.archive_chat,
     )
     app.run()
-

@@ -25,6 +25,6 @@ python bot.py
 
 - `API_ID` and `API_HASH` come from <https://my.telegram.org/apps>.
 - `ARCHIVE_CHAT` can be a public channel username such as `@my_archive` or a numeric chat ID such as `-1001234567890`.
+- For a private channel, prefer the numeric `-100...` channel ID. A plain positive ID like `3812511960` is not a valid target chat ID for this bot.
 - In BotFather, disable group privacy if you want the bot to reliably see all album messages in the group. Reply-based archiving can work with privacy enabled, but full album lookup is more reliable when the bot can see group messages.
 - Telegram only allows bots to copy messages they can access. The bot must be present in the source group and allowed to post in the target channel.
-
