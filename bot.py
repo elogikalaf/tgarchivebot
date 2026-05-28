@@ -81,6 +81,23 @@ async def copy_message_with_flood_wait(
             await asyncio.sleep(flood_wait.value)
 
 
+async def copy_media_group_with_flood_wait(
+    target_chat: str | int,
+    source_chat: int | str,
+    message_id: int,
+) -> list[Message]:
+    while True:
+        try:
+            return await app.copy_media_group(
+                chat_id=target_chat,
+                from_chat_id=source_chat,
+                message_id=message_id,
+            )
+        except FloodWait as flood_wait:
+            logger.warning("Flood wait for %s seconds", flood_wait.value)
+            await asyncio.sleep(flood_wait.value)
+
+
 def archive_chat_help_text() -> str:
     return (
         "Archive target is not reachable. Check ARCHIVE_CHAT and make sure the bot "
@@ -116,19 +133,14 @@ async def archive_single_message(command: Message, replied: Message) -> Message:
 
 async def archive_media_group(command: Message, replied: Message) -> list[Message]:
     try:
-        album = await app.get_media_group(replied.chat.id, replied.id)
+        return await copy_media_group_with_flood_wait(
+            settings.archive_chat,
+            replied.chat.id,
+            replied.id,
+        )
     except RPCError:
         logger.exception("Could not fetch media group; falling back to one message")
         return [await archive_single_message(command, replied)]
-
-    copied_messages: list[Message] = []
-    for item in sorted(album, key=lambda message: message.id):
-        copied_messages.append(await copy_message_with_flood_wait(
-            settings.archive_chat,
-            item.chat.id,
-            item.id,
-        ))
-    return copied_messages
 
 
 @app.on_message(filters.group & filters.command(settings.archive_command))
