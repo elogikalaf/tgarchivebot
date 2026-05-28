@@ -1,3 +1,4 @@
 pyrofork>=2.3.60,<3
 python-dotenv>=1.0.1,<2
 TgCrypto>=1.2.5,<2
+jdatetime>=5.2.0,<6

@@ -5,6 +5,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 
+import jdatetime
 from dotenv import load_dotenv
 from pyrogram import Client, filters, raw
 from pyrogram.errors import FloodWait, PeerIdInvalid, RPCError
@@ -149,16 +150,32 @@ def archive_note_text(message: Message) -> str | None:
 
 
 def message_date_text(message: Message) -> str:
-    date = message.date
-    if isinstance(date, datetime):
-        return date.strftime("%Y-%m-%d")
-    return str(date)
+    message_date = message.date
+    if isinstance(message_date, datetime):
+        return message_date.strftime("%Y-%m-%d")
+    return str(message_date)
+
+
+def message_date_lines(message: Message) -> list[str]:
+    message_date = message.date
+    if isinstance(message_date, datetime):
+        gregorian_date = message_date.date()
+        jalali_date = jdatetime.date.fromgregorian(date=gregorian_date)
+        return [
+            f"DATE: {gregorian_date:%Y-%m-%d}",
+            f"SOLAR_DATE: {jalali_date.year:04d}-{jalali_date.month:02d}-{jalali_date.day:02d}",
+        ]
+
+    return [f"DATE: {message_date}"]
 
 
 def archive_note_with_date(command: Message, source: Message) -> str:
-    date = message_date_text(source)
     note = archive_note_text(command)
-    return date if note is None else f"{note} {date}"
+    lines = []
+    if note is not None:
+        lines.append(f"TEXT: {note}")
+    lines.extend(message_date_lines(source))
+    return "\n".join(lines)
 
 
 async def send_archive_note(
