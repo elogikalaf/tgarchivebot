@@ -3,6 +3,7 @@ import inspect
 import logging
 import os
 from dataclasses import dataclass
+from datetime import datetime
 
 from dotenv import load_dotenv
 from pyrogram import Client, filters, raw
@@ -130,6 +131,19 @@ def archive_note_text(message: Message) -> str | None:
     return note or None
 
 
+def message_date_text(message: Message) -> str:
+    date = message.date
+    if isinstance(date, datetime):
+        return date.strftime("%Y-%m-%d")
+    return str(date)
+
+
+def archive_note_with_date(command: Message, source: Message) -> str:
+    date = message_date_text(source)
+    note = archive_note_text(command)
+    return date if note is None else f"{note} {date}"
+
+
 async def send_archive_note(
     target_chat: str | int,
     reply_to_message_id: int,
@@ -194,16 +208,16 @@ async def archive_media_group(command: Message, replied: Message) -> list[Messag
 
 async def archive_note_if_present(
     command: Message,
+    source: Message,
     copied_messages: list[Message],
 ) -> Message | None:
-    note = archive_note_text(command)
-    if note is None or not copied_messages:
+    if not copied_messages:
         return None
 
     return await send_archive_note(
         settings.archive_chat,
         copied_messages[-1].id,
-        note,
+        archive_note_with_date(command, source),
     )
 
 
@@ -223,7 +237,7 @@ async def archive_command(_: Client, message: Message) -> None:
         else:
             copied_messages = [await archive_single_message(message, replied)]
 
-        await archive_note_if_present(message, copied_messages)
+        await archive_note_if_present(message, replied, copied_messages)
     except PeerIdInvalid:
         logger.exception("Archive target is invalid or unknown")
         await safe_reply(message, archive_chat_help_text())
