@@ -89,6 +89,23 @@ def archive_chat_help_text() -> str:
     )
 
 
+def chat_display_name(chat_id: int | str, title: str | None) -> str:
+    return title or str(chat_id)
+
+
+def telegram_message_link(message: Message) -> str | None:
+    chat = message.chat
+    if chat.username:
+        return f"https://t.me/{chat.username}/{message.id}"
+
+    if isinstance(chat.id, int):
+        private_chat_id = str(chat.id)
+        if private_chat_id.startswith("-100"):
+            return f"https://t.me/c/{private_chat_id[4:]}/{message.id}"
+
+    return None
+
+
 async def archive_single_message(command: Message, replied: Message) -> Message:
     return await copy_message_with_flood_wait(
         settings.archive_chat,
@@ -140,16 +157,29 @@ async def archive_command(_: Client, message: Message) -> None:
 
     if len(copied_messages) == 1:
         archived_message = copied_messages[0]
+        channel_name = chat_display_name(
+            archived_message.chat.id,
+            archived_message.chat.title,
+        )
+        message_link = telegram_message_link(archived_message)
+        reply_text = (
+            f"Archived 1 message in channel {channel_name}"
+            if message_link is None
+            else f"Archived 1 message in channel {channel_name}: {message_link}"
+        )
         await safe_reply(
             message,
-            f"Archived 1 message in channel {settings.archive_chat} "
-            f"with message id {archived_message.id}.",
+            reply_text,
         )
         return
 
+    channel_name = chat_display_name(
+        copied_messages[0].chat.id,
+        copied_messages[0].chat.title,
+    )
     await safe_reply(
         message,
-        f"Archived {len(copied_messages)} messages in channel {settings.archive_chat}.",
+        f"Archived {len(copied_messages)} messages in channel {channel_name}.",
     )
 
 
