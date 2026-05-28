@@ -223,7 +223,7 @@ async def archive_command(_: Client, message: Message) -> None:
         else:
             copied_messages = [await archive_single_message(message, replied)]
 
-        note_message = await archive_note_if_present(message, copied_messages)
+        await archive_note_if_present(message, copied_messages)
     except PeerIdInvalid:
         logger.exception("Archive target is invalid or unknown")
         await safe_reply(message, archive_chat_help_text())
@@ -245,26 +245,26 @@ async def archive_command(_: Client, message: Message) -> None:
             if message_link is None
             else f"Archived 1 message in channel {channel_name}: {message_link}"
         )
-        if note_message is not None:
-            reply_text += " Added search note after the archived message."
         await safe_reply(
             message,
             reply_text,
         )
         return
 
+    archived_message = copied_messages[0]
     channel_name = chat_display_name(
-        copied_messages[0].chat.id,
-        copied_messages[0].chat.title,
+        archived_message.chat.id,
+        archived_message.chat.title,
+    )
+    message_link = telegram_message_link(archived_message)
+    reply_text = (
+        f"Archived {len(copied_messages)} messages in channel {channel_name}"
+        if message_link is None
+        else f"Archived {len(copied_messages)} messages in channel {channel_name}: {message_link}"
     )
     await safe_reply(
         message,
-        (
-            f"Archived {len(copied_messages)} messages in channel {channel_name}. "
-            "Added search note after the archived media group."
-            if note_message is not None
-            else f"Archived {len(copied_messages)} messages in channel {channel_name}."
-        ),
+        reply_text,
     )
 
 
